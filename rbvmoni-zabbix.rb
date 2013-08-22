@@ -6,7 +6,13 @@ require 'logger'
 require 'rbvmomi'
 require 'fileutils'
 
+def print_usage
+  puts "usage: rbvmomi_zabbix.rb (vCenter Host) (vCenter Username) (vCenter Password) (Prefix Groups Name) (Zabbix URL)"
+  exit
+end
+
 print_usage if ARGV.size != 5
+
 vcHost = ARGV[0]
 vcUser = ARGV[1]
 vcPass = ARGV[2]
@@ -256,11 +262,6 @@ class VSphere < RbVmomi::VIM
     
   end
 
-end
-
-def print_usage
-  puts "usage: rbvmomi_zabbix.rb (vCenter Host) (vCenter Username) (vCenter Password) (Zabbix URL)"
-  exit
 end
 
 def writefile(fileName, data)
