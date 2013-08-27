@@ -23,7 +23,10 @@ $zbxUrl = ARGV[4]
 #User Defined Parameters
 #Exclude Vmware Templates? (jaganz)
 $includeVmwareTemplates = false
-##Zabbix Valid Login
+#Deprovisioning Method (delete host or move to deprovisioned host group?)
+$EnableDeprovisioningHostGroup = true
+$DEPROV_GROUP = "Deprovisioned Hosts"
+#Zabbix Valid Login
 $zuser = "Admin"
 $zpass = "zabbix"
 #Other Related Stuff
@@ -151,6 +154,21 @@ class Zbx < ZabbixAPI
       :hostid => get_zbxHostId(hostName)
     } if search_zbxHost(hostName)
     send_zbx("host.delete", zbxHash) if zbxHash
+  end
+
+  def deprov_zbxHost(hostName, deprovGroup)  
+    if search_zbxGroup(deprovGroup) == false
+      create_zbxGroup(deprovGroup)  
+    end
+    @deprovGroupid = get_zbxGroupId(deprovGroup)   
+    zbxHash = {
+      :hostid => get_zbxHostId(hostName),
+      :groups => [{
+        :groupid => @deprovGroupid 
+      }],
+      :status => 1
+    } if search_zbxHost(hostName)
+    send_zbx("host.update", zbxHash) if zbxHash
   end
 end
 
@@ -290,17 +308,27 @@ def writefile(fileName, data)
 end
 
 
+#Manage Deprovisioning based on delta time of last updated stat files
 def stats_file_age_check(time)
-  # 1............Zabbix....
   Dir::glob($filePath + "*").each do |f|
     if Time.now - File.stat(f).mtime >= time
       /\A[vhd]_(.*)\z/ =~ File.basename(f)
       unless defined?(zbxapi)
         @zbxapi = Zbx.new
       end
-      $log.info($1 + " deprovisioned on zabbix after " + time.to_s + " seconds without updates")
-      @zbxapi.delete_zbxHost($1)
-      File.delete(f)
+      if $EnableDeprovisioningHostGroup == true
+        if $DEPROV_GROUP.to_s.strip.length == 0
+          log.error("Error in deprovisioning step: $EnableDeprovisioningHostGroup is activated but not DEPROV_GROUP is defined.")
+          raise "$EnableDeprovisioningHostGroup is activated but DEPROV_GROUP is not defined."
+        else
+          @zbxapi.deprov_zbxHost($1, $DEPROV_GROUP)
+          $log.info($1 + " deprovisioned (moved into deprovisioning group) on zabbix after " + time.to_s + " seconds without updates")
+        end
+      else
+       $log.info($1 + " deprovisioned (deleted) on zabbix after " + time.to_s + " seconds without updates")
+        @zbxapi.delete_zbxHost($1)
+        File.delete(f)
+      end
     end
   end
 end
